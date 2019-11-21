@@ -39,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import traceback
 
 
@@ -120,6 +121,18 @@ def which(name):
     return subprocess.check_output([binary, name])
   except subprocess.CalledProcessError:
     return None
+
+
+def sgetattr(attr, default):
+  """Get an attribute off the `socket` module, or use a default."""
+  sentinel = object()
+  result = getattr(socket, attr, sentinel)
+  if result is sentinel:
+    print("socket.%s does not exist" % attr)
+    return default
+  else:
+    print("socket.%s = %r" % (attr, result))
+    return result
 
 
 @check
@@ -242,6 +255,66 @@ def tensorflow_python_version():
 @check
 def tensorboard_binary_path():
   logging.info("which tensorboard: %r", which("tensorboard"))
+
+
+@check
+def addrinfos():
+  """Gets family and nodename for a loopback address."""
+  print("On `socket`: %r" % (dir(socket),))
+
+  sgetattr("has_ipv6", None)
+  family = sgetattr("AF_UNSPEC", 0)
+  socktype = sgetattr("SOCK_STREAM", 0)
+  protocol = 0
+  flags_loopback = sgetattr("AI_ADDRCONFIG", 0)
+  flags_wildcard = sgetattr("AI_PASSIVE", 0)
+
+  hints_loopback = (family, socktype, protocol, flags_loopback)
+  infos_loopback = socket.getaddrinfo(None, 0, *hints_loopback)
+  print("Loopback flags: %r" % (flags_loopback,))
+  print("Loopback infos: %r" % (infos_loopback,))
+
+  hints_wildcard = (family, socktype, protocol, flags_wildcard)
+  infos_wildcard = socket.getaddrinfo(None, 0, *hints_wildcard)
+  print("Loopback flags: %r" % (flags_wildcard,))
+  print("Loopback infos: %r" % (infos_wildcard,))
+
+
+#@check
+#def connect_loopbacks():
+#  for family in (sgetattr("AF_INET", None), sgetattr("AF_INET6", None)):
+#    if family is None:
+#      continue
+#    try:
+#      family = sgetattr("AF_UNSPEC", 0)
+#      socktype = sgetattr("SOCK_STREAM", 0)
+#      protocol = 0
+#      flags = sgetattr("AI_ADDRCONFIG", 0)
+#      hints = (family, socktype, protocol, flags)
+#      infos = socket.getaddrinfo(None, 0, *hints)
+#      for info in infos:
+#        (family, _, _, _, sockaddr) = info
+#        nodename = sockaddr[0]
+#        s = socket.socket(family)
+#        s.bind((nodename, 0))
+#        port = s.getsockname()[1]
+#        if ":" in nodename and not nodename.startswith("["):
+#          display_host = "[%s]" % nodename
+#        else:
+#          display_host = nodename
+#
+#        def accept_forever():
+#          while True:
+#            s.accept()
+#
+#        t = threading.Thread(target=accept_forever)
+#        t.daemon = True
+#        t.start()
+#
+#    except Exception:
+#      traceback.print_exc(file=sys.stdout)
+#      pass
+
 
 
 @check
