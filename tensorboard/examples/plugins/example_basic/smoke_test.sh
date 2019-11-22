@@ -50,7 +50,11 @@ pip uninstall -y tensorboard tb-nightly  # drop conflicting packages
 pip install ./tensorboard-wheels/*py"${py_major_version}"*.whl
 pip install ./example-plugin/dist/*.whl
 
+pip freeze --all
+
 python -m tensorboard_plugin_example.demo
+
+python -c 'print(list(__import__("pkg_resources").iter_entry_points("tensorboard_plugins")))' || true
 
 # Test tensorboard + tensorboard_plugin_example integration.
 mkfifo pipe
@@ -63,6 +67,14 @@ tensorboard \
 perl -ne 'print STDERR;/http:.*:(\d+)/ and print $1.v10 and exit 0' <pipe >port
 port="$(cat port)"
 curl -sS "http://localhost:${port}/data/plugins_listing" >plugins_listing
+printf 'got plugins_listing:\n>>>\n'
+cat plugins_listing
+printf '<<< (plugins_listing)\n'
+curl -sS "http://localhost:${port}/data/plugin/example_basic/index.js" >index.js
+printf 'got index.js:\n>>>\n'
+cat index.js
+printf '<<< (index.js)\n'
+
 curl -fsS "http://localhost:${port}/data/plugin/example_basic/index.js" >index.js
 diff -u example-plugin/tensorboard_plugin_example/static/index.js index.js
 curl -fsS "http://localhost:${port}/data/plugins_listing" >plugins_listing

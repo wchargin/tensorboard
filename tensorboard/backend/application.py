@@ -176,6 +176,15 @@ def _handling_errors(wsgi_app):
           request, str(e), "text/plain", code=e.http_code
       )
       return error_app(environ, start_response)
+    except Exception as e:
+      # DO NOT SUBMIT
+      request = wrappers.Request(environ)
+      import traceback
+      error_app = http_util.Respond(
+          request, "Oops\n%s\n" % traceback.format_exc(), "text/plain", code=500
+      )
+      return error_app(environ, start_response)
+
     # Let other exceptions be handled by the server, as an opaque
     # internal server error.
   return wrapper
