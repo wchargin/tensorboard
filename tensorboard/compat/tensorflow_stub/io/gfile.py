@@ -14,8 +14,8 @@
 # ==============================================================================
 """File IO methods that wrap the C++ FileSystem API.
 
-The C++ FileSystem API is SWIG wrapped in file_io.i. These functions call those
-to accomplish basic File IO operations.
+The C++ FileSystem API is SWIG wrapped in file_io.i. These functions
+call those to accomplish basic File IO operations.
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -32,9 +32,11 @@ import six
 import sys
 import tempfile
 import uuid
+
 try:
     import botocore.exceptions
     import boto3
+
     S3_ENABLED = True
 except ImportError:
     S3_ENABLED = False
@@ -60,7 +62,7 @@ _REGISTERED_FILESYSTEMS = {}
 
 
 def register_filesystem(prefix, filesystem):
-    if ':' in prefix:
+    if ":" in prefix:
         raise ValueError("Filesystem prefix cannot contain a :")
     _REGISTERED_FILESYSTEMS[prefix] = filesystem
 
@@ -129,8 +131,8 @@ class LocalFileSystem(object):
             return (data, continuation_token)
 
     def write(self, filename, file_content, binary_mode=False):
-        """Writes string file contents to a file, overwriting any
-        existing contents.
+        """Writes string file contents to a file, overwriting any existing
+        contents.
 
         Args:
             filename: string, a path
@@ -160,8 +162,7 @@ class LocalFileSystem(object):
             return [
                 # Convert the filenames to string from bytes.
                 compat.as_str_any(matching_filename)
-                for matching_filename in py_glob.glob(
-                    compat.as_bytes(filename))
+                for matching_filename in py_glob.glob(compat.as_bytes(filename))
             ]
         else:
             return [
@@ -169,7 +170,8 @@ class LocalFileSystem(object):
                 compat.as_str_any(matching_filename)
                 for single_filename in filename
                 for matching_filename in py_glob.glob(
-                    compat.as_bytes(single_filename))
+                    compat.as_bytes(single_filename)
+                )
             ]
 
     def isdir(self, dirname):
@@ -190,7 +192,9 @@ class LocalFileSystem(object):
         try:
             os.makedirs(path)
         except FileExistsError:
-            raise errors.AlreadyExistsError(None, None, "Directory already exists")
+            raise errors.AlreadyExistsError(
+                None, None, "Directory already exists"
+            )
 
     def stat(self, filename):
         """Returns file statistics for a given path."""
@@ -214,10 +218,10 @@ class S3FileSystem(object):
         """Split an S3-prefixed URL into bucket and path."""
         url = compat.as_str_any(url)
         if url.startswith("s3://"):
-            url = url[len("s3://"):]
+            url = url[len("s3://") :]
         idx = url.index("/")
         bucket = url[:idx]
-        path = url[(idx + 1):]
+        path = url[(idx + 1) :]
         return bucket, path
 
     def exists(self, filename):
@@ -263,44 +267,44 @@ class S3FileSystem(object):
         if continue_from is not None:
             offset = continue_from.get("byte_offset", 0)
 
-        endpoint = ''
+        endpoint = ""
         if size is not None:
             # TODO(orionr): This endpoint risks splitting a multi-byte
             # character or splitting \r and \n in the case of CRLFs,
             # producing decoding errors below.
             endpoint = offset + size
 
-        if offset != 0 or endpoint != '':
+        if offset != 0 or endpoint != "":
             # Asked for a range, so modify the request
-            args['Range'] = 'bytes={}-{}'.format(offset, endpoint)
+            args["Range"] = "bytes={}-{}".format(offset, endpoint)
 
         try:
-            stream = s3.Object(bucket, path).get(**args)['Body'].read()
+            stream = s3.Object(bucket, path).get(**args)["Body"].read()
         except botocore.exceptions.ClientError as exc:
-            if exc.response['Error']['Code'] == '416':
+            if exc.response["Error"]["Code"] == "416":
                 if size is not None:
                     # Asked for too much, so request just to the end. Do this
                     # in a second request so we don't check length in all cases.
                     client = boto3.client("s3")
                     obj = client.head_object(Bucket=bucket, Key=path)
-                    content_length = obj['ContentLength']
+                    content_length = obj["ContentLength"]
                     endpoint = min(content_length, offset + size)
                 if offset == endpoint:
                     # Asked for no bytes, so just return empty
-                    stream = b''
+                    stream = b""
                 else:
-                    args['Range'] = 'bytes={}-{}'.format(offset, endpoint)
-                    stream = s3.Object(bucket, path).get(**args)['Body'].read()
+                    args["Range"] = "bytes={}-{}".format(offset, endpoint)
+                    stream = s3.Object(bucket, path).get(**args)["Body"].read()
             else:
                 raise
         # `stream` should contain raw bytes here (i.e., there has been neither
         # decoding nor newline translation), so the byte offset increases by
         # the expected amount.
-        continuation_token = {'byte_offset': (offset + len(stream))}
+        continuation_token = {"byte_offset": (offset + len(stream))}
         if binary_mode:
             return (bytes(stream), continuation_token)
         else:
-            return (stream.decode('utf-8'), continuation_token)
+            return (stream.decode("utf-8"), continuation_token)
 
     def write(self, filename, file_content, binary_mode=False):
         """Writes string file contents to a file.
@@ -315,7 +319,7 @@ class S3FileSystem(object):
         # Always convert to bytes for writing
         if binary_mode:
             if not isinstance(file_content, six.binary_type):
-                raise TypeError('File content type must be bytes')
+                raise TypeError("File content type must be bytes")
         else:
             file_content = compat.as_bytes(file_content)
         client.put_object(Body=file_content, Bucket=bucket, Key=path)
@@ -323,11 +327,12 @@ class S3FileSystem(object):
     def glob(self, filename):
         """Returns a list of files that match the given pattern(s)."""
         # Only support prefix with * at the end and no ? in the string
-        star_i = filename.find('*')
-        quest_i = filename.find('?')
+        star_i = filename.find("*")
+        quest_i = filename.find("?")
         if quest_i >= 0:
             raise NotImplementedError(
-                "{} not supported by compat glob".format(filename))
+                "{} not supported by compat glob".format(filename)
+            )
         if star_i != len(filename) - 1:
             # Just return empty so we can use glob from directory watcher
             #
@@ -342,7 +347,7 @@ class S3FileSystem(object):
         keys = []
         for r in p.paginate(Bucket=bucket, Prefix=path):
             for o in r.get("Contents", []):
-                key = o["Key"][len(path):]
+                key = o["Key"][len(path) :]
                 if key:  # Skip the base dir, which would add an empty string
                     keys.append(filename + key)
         return keys
@@ -367,9 +372,11 @@ class S3FileSystem(object):
             path += "/"  # This will now only retrieve subdir content
         keys = []
         for r in p.paginate(Bucket=bucket, Prefix=path, Delimiter="/"):
-            keys.extend(o["Prefix"][len(path):-1] for o in r.get("CommonPrefixes", []))
+            keys.extend(
+                o["Prefix"][len(path) : -1] for o in r.get("CommonPrefixes", [])
+            )
             for o in r.get("Contents", []):
-                key = o["Key"][len(path):]
+                key = o["Key"][len(path) :]
                 if key:  # Skip the base dir, which would add an empty string
                     keys.append(key)
         return keys
@@ -377,12 +384,14 @@ class S3FileSystem(object):
     def makedirs(self, dirname):
         """Creates a directory and all parent/intermediate directories."""
         if self.exists(dirname):
-            raise errors.AlreadyExistsError(None, None, "Directory already exists")
+            raise errors.AlreadyExistsError(
+                None, None, "Directory already exists"
+            )
         client = boto3.client("s3")
         bucket, path = self.bucket_and_path(dirname)
         if not path.endswith("/"):
             path += "/"  # This will make sure we don't override a file
-        client.put_object(Body='', Bucket=bucket, Key=path)
+        client.put_object(Body="", Bucket=bucket, Key=path)
 
     def stat(self, filename):
         """Returns file statistics for a given path."""
@@ -392,9 +401,9 @@ class S3FileSystem(object):
         bucket, path = self.bucket_and_path(filename)
         try:
             obj = client.head_object(Bucket=bucket, Key=path)
-            return StatData(obj['ContentLength'])
+            return StatData(obj["ContentLength"])
         except botocore.exceptions.ClientError as exc:
-            if exc.response['Error']['Code'] == '404':
+            if exc.response["Error"]["Code"] == "404":
                 raise errors.NotFoundError(None, None, "Could not find file")
             else:
                 raise
@@ -409,12 +418,13 @@ class GFile(object):
     # Only methods needed for TensorBoard are implemented.
 
     def __init__(self, filename, mode):
-        if mode not in ('r', 'rb', 'br', 'w', 'wb', 'bw'):
+        if mode not in ("r", "rb", "br", "w", "wb", "bw"):
             raise NotImplementedError(
-                "mode {} not supported by compat GFile".format(mode))
+                "mode {} not supported by compat GFile".format(mode)
+            )
         self.filename = compat.as_bytes(filename)
         self.fs = get_filesystem(self.filename)
-        self.fs_supports_append = hasattr(self.fs, 'append')
+        self.fs_supports_append = hasattr(self.fs, "append")
         self.buff = None
         # The buffer offset and the buffer chunk size are measured in the
         # natural units of the underlying stream, i.e. bytes for binary mode,
@@ -424,8 +434,8 @@ class GFile(object):
         self.continuation_token = None
         self.write_temp = None
         self.write_started = False
-        self.binary_mode = 'b' in mode
-        self.write_mode = 'w' in mode
+        self.binary_mode = "b" in mode
+        self.write_mode = "w" in mode
         self.closed = False
 
     def __enter__(self):
@@ -444,7 +454,7 @@ class GFile(object):
         old_buff_offset = self.buff_offset
         read_size = min(len(self.buff), new_buff_offset) - old_buff_offset
         self.buff_offset += read_size
-        return self.buff[old_buff_offset:old_buff_offset + read_size]
+        return self.buff[old_buff_offset : old_buff_offset + read_size]
 
     def read(self, n=None):
         """Reads contents of file to a string.
@@ -472,7 +482,8 @@ class GFile(object):
         # read from filesystem
         read_size = max(self.buff_chunk_size, n) if n is not None else None
         (self.buff, self.continuation_token) = self.fs.read(
-            self.filename, self.binary_mode, read_size, self.continuation_token)
+            self.filename, self.binary_mode, read_size, self.continuation_token
+        )
         self.buff_offset = 0
 
         # add from filesystem
@@ -486,8 +497,8 @@ class GFile(object):
         return result
 
     def write(self, file_content):
-        """Writes string file contents to file, clearing contents of the
-        file on first write and then appending on subsequent calls.
+        """Writes string file contents to file, clearing contents of the file
+        on first write and then appending on subsequent calls.
 
         Args:
             file_content: string, the contents
@@ -518,12 +529,12 @@ class GFile(object):
             if not self.buff:
                 # read one unit into the buffer
                 line = self.read(1)
-                if line and (line[-1] == '\n' or not self.buff):
+                if line and (line[-1] == "\n" or not self.buff):
                     return line
                 if not self.buff:
                     raise StopIteration()
             else:
-                index = self.buff.find('\n', self.buff_offset)
+                index = self.buff.find("\n", self.buff_offset)
                 if index != -1:
                     # include line until now plus newline
                     chunk = self.read(index + 1 - self.buff_offset)
@@ -533,7 +544,7 @@ class GFile(object):
                 # read one unit past end of buffer
                 chunk = self.read(len(self.buff) + 1 - self.buff_offset)
                 line = line + chunk if line else chunk
-                if line and (line[-1] == '\n' or not self.buff):
+                if line and (line[-1] == "\n" or not self.buff):
                     return line
                 if not self.buff:
                     raise StopIteration()
@@ -558,7 +569,7 @@ class GFile(object):
 
     def close(self):
         self.flush()
-        if  self.write_temp is not None:
+        if self.write_temp is not None:
             self.write_temp.close()
             self.write_temp = None
             self.write_started = False
