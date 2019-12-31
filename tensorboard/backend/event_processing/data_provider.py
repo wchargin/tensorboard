@@ -26,8 +26,8 @@ import six
 
 from tensorboard import errors
 from tensorboard.backend.event_processing import plugin_event_accumulator
+from tensorboard.compat.proto import summary_pb2
 from tensorboard.data import provider
-from tensorboard.plugins.graph import metadata as graphs_metadata
 from tensorboard.util import tb_logging
 from tensorboard.util import tensor_util
 
@@ -191,99 +191,101 @@ class MultiplexerDataProvider(provider.DataProvider):
         if run_tag_filter is None:
             run_tag_filter = provider.RunTagFilter(runs=None, tags=None)
 
-        # TODO(davidsoergel, wchargin): consider images, etc.
-        # Note this plugin_name can really just be 'graphs' for now; the
-        # v2 cases are not handled yet.
-        if plugin_name != graphs_metadata.PLUGIN_NAME:
-            logger.warn("Directory has no blob data for plugin %r", plugin_name)
-            return {}
-
-        result = collections.defaultdict(lambda: {})
-        for (run, run_info) in six.iteritems(self._multiplexer.Runs()):
-            tag = graphs_metadata.RUN_GRAPH_NAME
-            if not self._test_run_tag(run_tag_filter, run, tag):
-                continue
-            if not run_info[plugin_event_accumulator.GRAPH]:
-                continue
-            result[run][tag] = provider.BlobSequenceTimeSeries(
-                max_step=0,
-                max_wall_time=0,
-                latest_max_index=0,  # Graphs are always one blob at a time
-                plugin_content=None,
-                description=None,
-                display_name=None,
-            )
+        result = {}
+        run_tag_content = self._multiplexer.PluginRunToTagToContent(plugin_name)
+        for (run, tag_to_content) in six.iteritems(run_tag_content):
+            result_for_run = {}
+            for tag in tag_to_content:
+                if not self._test_run_tag(run_tag_filter, run, tag):
+                    continue
+                summary_metadata = self._multiplexer.SummaryMetadata(run, tag)
+                if (
+                    summary_metadata.data_class
+                    != summary_pb2.DATA_CLASS_BLOB_SEQUENCE
+                ):
+                    continue
+                result[run] = result_for_run
+                max_step = None
+                max_wall_time = None
+                for event in self._multiplexer.Tensors(run, tag):
+                    if max_step is None or max_step < event.step:
+                        max_step = event.step
+                    if max_wall_time is None or max_wall_time < event.wall_time:
+                        max_wall_time = event.wall_time
+                result_for_run[tag] = provider.BlobSequenceTimeSeries(
+                    max_step=max_step,
+                    max_wall_time=max_wall_time,
+                    latest_max_index=0,  # DO NOT SUBMIT
+                    plugin_content=summary_metadata.plugin_data.content,
+                    description=summary_metadata.summary_description,
+                    display_name=summary_metadata.display_name,
+                )
         return result
 
     def read_blob_sequences(
         self, experiment_id, plugin_name, downsample=None, run_tag_filter=None
     ):
         self._validate_experiment_id(experiment_id)
-        # TODO(davidsoergel, wchargin): consider images, etc.
-        # Note this plugin_name can really just be 'graphs' for now; the
-        # v2 cases are not handled yet.
-        if plugin_name != graphs_metadata.PLUGIN_NAME:
-            logger.warn("Directory has no blob data for plugin %r", plugin_name)
-            return {}
-
-        result = collections.defaultdict(
-            lambda: collections.defaultdict(lambda: [])
+        index = self.list_blob_sequences(
+            experiment_id, plugin_name, run_tag_filter=run_tag_filter
         )
-        for (run, run_info) in six.iteritems(self._multiplexer.Runs()):
-            tag = graphs_metadata.RUN_GRAPH_NAME
-            if not self._test_run_tag(run_tag_filter, run, tag):
-                continue
-            if not run_info[plugin_event_accumulator.GRAPH]:
-                continue
-
-            time_series = result[run][tag]
-
-            wall_time = 0.0  # dummy value for graph
-            step = 0  # dummy value for graph
-            index = 0  # dummy value for graph
-
-            # In some situations these blobs may have directly accessible URLs.
-            # But, for now, we assume they don't.
-            graph_url = None
-            graph_blob_key = _encode_blob_key(
-                experiment_id, plugin_name, run, tag, step, index
-            )
-            blob_ref = provider.BlobReference(graph_blob_key, graph_url)
-
-            datum = provider.BlobSequenceDatum(
-                wall_time=wall_time, step=step, values=(blob_ref,),
-            )
-            time_series.append(datum)
+        result = {}
+        for (run, tags_for_run) in six.iteritems(index):
+            result_for_run = {}
+            result[run] = result_for_run
+            for (tag, metadata) in six.iteritems(tags_for_run):
+                events = self._multiplexer.Tensors(run, tag)
+                data = []
+                for event in events:
+                    num_blobs = tensor_util.make_ndarray(
+                        event.tensor_proto
+                    ).size
+                    values = tuple(
+                        provider.BlobReference(
+                            _encode_blob_key(
+                                experiment_id,
+                                plugin_name,
+                                run,
+                                tag,
+                                event.step,
+                                i,
+                            )
+                        )
+                        for i in range(num_blobs)
+                    )
+                    data.append(
+                        provider.BlobSequenceDatum(
+                            wall_time=event.wall_time,
+                            step=event.step,
+                            values=values,
+                        )
+                    )
+                result_for_run[tag] = data
         return result
 
     def read_blob(self, blob_key):
-        # note: ignoring nearly all key elements: there is only one graph per run.
         (
             unused_experiment_id,
             plugin_name,
             run,
-            unused_tag,
-            unused_step,
-            unused_index,
+            tag,
+            step,
+            index,
         ) = _decode_blob_key(blob_key)
 
-        # TODO(davidsoergel, wchargin): consider images, etc.
-        if plugin_name != graphs_metadata.PLUGIN_NAME:
-            logger.warn("Directory has no blob data for plugin %r", plugin_name)
-            raise errors.NotFoundError()
-
-        serialized_graph = self._multiplexer.SerializedGraph(run)
-
-        # TODO(davidsoergel): graph_defs have no step attribute so we don't filter
-        # on it.  Other blob types might, though.
-
-        if serialized_graph is None:
-            logger.warn("No blob found for key %r", blob_key)
-            raise errors.NotFoundError()
-
-        # TODO(davidsoergel): consider internal structure of non-graphdef blobs.
-        # In particular, note we ignore the requested index, since it's always 0.
-        return serialized_graph
+        summary_metadata = self._multiplexer.SummaryMetadata(run, tag)
+        if summary_metadata.data_class != summary_pb2.DATA_CLASS_BLOB_SEQUENCE:
+            raise errors.NotFoundError(blob_key)
+        tensor_events = self._multiplexer.Tensors(run, tag)
+        matching_steps = [e for e in tensor_events if e.step == step]
+        if not matching_steps:
+            raise errors.NotFoundError("%s: no such step %r" % (blob_key, step))
+        if len(matching_steps) > 1:
+            raise errors.NotFoundError(
+                "%s: conflicting values for step %r" % (blob_key, step)
+            )
+        tensor = tensor_util.make_ndarray(matching_steps[0].tensor_proto)
+        return tensor[index]
 
 
 # TODO(davidsoergel): deduplicate with other implementations

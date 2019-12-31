@@ -461,6 +461,22 @@ py_test(
     ],
 )
 
+py_library(
+    name = "dataclass_compat",
+    srcs = ["dataclass_compat.py"],
+    srcs_version = "PY2AND3",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//tensorboard/compat/proto:protos_all_py_pb2",
+        "//tensorboard/plugins/audio:metadata",
+        "//tensorboard/plugins/histogram:metadata",
+        "//tensorboard/plugins/image:metadata",
+        "//tensorboard/plugins/scalar:metadata",
+        "//tensorboard/plugins/graph:metadata",
+        "//tensorboard/util:tensor_util",
+    ],
+)
+
 py_binary(
     name = "encode_png_benchmark",
     srcs = ["encode_png_benchmark.py"],

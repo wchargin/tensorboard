@@ -31,6 +31,7 @@ from tensorboard.compat.proto import graph_pb2
 from tensorboard.compat.proto import meta_graph_pb2
 from tensorboard.compat.proto import summary_pb2
 from tensorboard.plugins.audio import summary as audio_summary
+from tensorboard.plugins.graph import metadata as graphs_metadata
 from tensorboard.plugins.image import summary as image_summary
 from tensorboard.plugins.scalar import summary as scalar_summary
 from tensorboard.util import tb_logging
@@ -76,6 +77,7 @@ class _EventGenerator(object):
         self.AddEvent(event)
 
     def AddEvent(self, event):
+        event = event_pb2.Event.FromString(event.SerializeToString())
         if self.zero_out_timestamps:
             event.wall_time = 0.0
         self.items.append(event)
@@ -386,6 +388,7 @@ class MockingEventAccumulatorTest(EventAccumulatorTest):
         accumulator.Reload()
 
         tags = [
+            graphs_metadata.RUN_GRAPH_NAME,
             u"accuracy/scalar_summary",
             u"xent/scalar_summary",
         ]
@@ -425,6 +428,7 @@ class MockingEventAccumulatorTest(EventAccumulatorTest):
         accumulator.Reload()
 
         tags = [
+            graphs_metadata.RUN_GRAPH_NAME,
             u"1/one/audio_summary",
             u"2/two/audio_summary",
             u"3/three/audio_summary",
@@ -463,6 +467,7 @@ class MockingEventAccumulatorTest(EventAccumulatorTest):
         accumulator.Reload()
 
         tags = [
+            graphs_metadata.RUN_GRAPH_NAME,
             u"1/images/image_summary",
             u"2/images/image_summary",
             u"3/images/image_summary",
@@ -626,7 +631,7 @@ class RealisticEventAccumulatorTest(EventAccumulatorTest):
         self.assertTagsEqual(
             acc.Tags(),
             {
-                ea.TENSORS: ["id", "sq"],
+                ea.TENSORS: [graphs_metadata.RUN_GRAPH_NAME, "id", "sq"],
                 ea.GRAPH: True,
                 ea.META_GRAPH: True,
                 ea.RUN_METADATA: ["test run"],
