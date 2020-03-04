@@ -130,6 +130,9 @@ class TensorBoardExporterTest(tb_test.TestCase):
         self.assertEqual(next(generator), "123")
         expected_files.append(os.path.join("experiment_123", "metadata.json"))
         expected_files.append(os.path.join("experiment_123", "scalars.json"))
+        expected_files.append(
+            os.path.join("experiment_123", "blob_sequences.json")
+        )
         self.assertCountEqual(expected_files, outdir_files())
 
         expected_eids_request = export_service_pb2.StreamExperimentsRequest()
@@ -157,6 +160,9 @@ class TensorBoardExporterTest(tb_test.TestCase):
 
         expected_files.append(os.path.join("experiment_456", "metadata.json"))
         expected_files.append(os.path.join("experiment_456", "scalars.json"))
+        expected_files.append(
+            os.path.join("experiment_456", "blob_sequences.json")
+        )
         self.assertCountEqual(expected_files, outdir_files())
         mock_api_client.StreamExperiments.assert_not_called()
         expected_data_request.experiment_id = "456"
@@ -168,6 +174,9 @@ class TensorBoardExporterTest(tb_test.TestCase):
         # was in the second response batch in the list of IDs.
         expected_files.append(os.path.join("experiment_789", "metadata.json"))
         expected_files.append(os.path.join("experiment_789", "scalars.json"))
+        expected_files.append(
+            os.path.join("experiment_789", "blob_sequences.json")
+        )
         mock_api_client.StreamExperiments.reset_mock()
         mock_api_client.StreamExperimentData.reset_mock()
         self.assertEqual(next(generator), "789")

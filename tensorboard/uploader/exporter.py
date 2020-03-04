@@ -50,6 +50,10 @@ _MAX_INT64 = 2 ** 63 - 1
 _FILENAME_METADATA = "metadata.json"
 # Output filename for scalar data within an experiment directory.
 _FILENAME_SCALARS = "scalars.json"
+# Output filename for blob sequence data within an experiment directory.
+_FILENAME_BLOB_SEQUENCES = "blob_sequences.json"
+# Output directory for blob contents within an experiment directory.
+_FILENAME_BLOBS_DIR = "blobs"
 
 logger = tb_logging.get_logger()
 
@@ -124,8 +128,12 @@ class TensorBoardExporter(object):
         experiment_metadata_mask = experiment_pb2.ExperimentMask(
             create_time=True, update_time=True, name=True, description=True,
         )
-        experiments = list_experiments(
-            self._api, fieldmask=experiment_metadata_mask, read_time=read_time
+        experiments = list(
+            list_experiments(
+                self._api,
+                fieldmask=experiment_metadata_mask,
+                read_time=read_time,
+            )
         )
         for experiment in experiments:
             experiment_id = experiment.experiment_id
@@ -141,58 +149,111 @@ class TensorBoardExporter(object):
             }
             experiment_dir = _experiment_directory(self._outdir, experiment_id)
             os.mkdir(experiment_dir)
+            os.mkdir(os.path.join(experiment_dir, _FILENAME_BLOBS_DIR))
 
             metadata_filepath = os.path.join(experiment_dir, _FILENAME_METADATA)
             with _open_excl(metadata_filepath) as outfile:
                 json.dump(experiment_metadata, outfile, sort_keys=True)
                 outfile.write("\n")
 
-            scalars_filepath = os.path.join(experiment_dir, _FILENAME_SCALARS)
+            request = export_service_pb2.StreamExperimentDataRequest()
+            request.experiment_id = experiment_id
+            util.set_timestamp(request.read_timestamp, read_time)
+            # No special error handling as we don't expect any errors from these
+            # calls: all experiments should exist (read consistency timestamp)
+            # and be owned by the calling user (only queried for own experiment
+            # IDs). Any non-transient errors would be internal, and we have no
+            # way to efficiently resume from transient errors because the server
+            # does not support pagination.
             try:
-                with _open_excl(scalars_filepath) as outfile:
-                    data = self._request_scalar_data(experiment_id, read_time)
-                    for block in data:
-                        json.dump(block, outfile, sort_keys=True)
-                        outfile.write("\n")
-                        outfile.flush()
-                yield experiment_id
+                stream = self._api.StreamExperimentData(
+                    request, metadata=grpc_util.version_metadata()
+                )
+                self._handle_responses(experiment_dir, stream)
             except grpc.RpcError as e:
                 if e.code() == grpc.StatusCode.CANCELLED:
                     raise GrpcTimeoutException(experiment_id)
                 else:
                     raise
+            yield experiment_id
 
-    def _request_scalar_data(self, experiment_id, read_time):
-        """Yields JSON-serializable blocks of scalar data."""
-        request = export_service_pb2.StreamExperimentDataRequest()
-        request.experiment_id = experiment_id
-        util.set_timestamp(request.read_timestamp, read_time)
-        # No special error handling as we don't expect any errors from these
-        # calls: all experiments should exist (read consistency timestamp)
-        # and be owned by the calling user (only queried for own experiment
-        # IDs). Any non-transient errors would be internal, and we have no
-        # way to efficiently resume from transient errors because the server
-        # does not support pagination.
-        stream = self._api.StreamExperimentData(
+    def _handle_responses(self, experiment_dir, stream):
+        def output_file(filename):
+            return _open_excl(os.path.join(experiment_dir, filename))
+
+        with output_file(_FILENAME_SCALARS) as scalars_outfile, output_file(
+            _FILENAME_BLOB_SEQUENCES
+        ) as blob_sequences_outfile:
+            for response in stream:
+                if response.HasField("points"):  # this means "scalars" :-/
+                    self._write_scalars(response, scalars_outfile)
+                if response.HasField("blob_sequences"):
+                    self._write_blob_sequences(
+                        response, blob_sequences_outfile, experiment_dir
+                    )
+            scalars_filepath = os.path.join(experiment_dir, _FILENAME_SCALARS)
+
+    def _write_block(self, response, steps, wall_times, values, outfile):
+        metadata_bytes = response.tag_metadata.SerializeToString()
+        metadata = base64.b64encode(metadata_bytes).decode("ascii")
+        wall_times = [t.ToNanoseconds() / 1e9 for t in wall_times]
+        block = {
+            "run": response.run_name,
+            "tag": response.tag_name,
+            "summary_metadata": metadata,
+            "points": {
+                "steps": steps,
+                "wall_times": wall_times,
+                "values": values,
+            },
+        }
+        json.dump(block, outfile, sort_keys=True)
+        outfile.write("\n")
+        outfile.flush()
+
+    def _write_scalars(self, response, scalars_outfile):
+        self._write_block(
+            response=response,
+            steps=list(response.points.steps),
+            wall_times=response.points.wall_times,
+            values=list(response.points.values),
+            outfile=scalars_outfile,
+        )
+
+    def _write_blob_sequences(
+        self, response, blob_sequences_outfile, experiment_dir
+    ):
+        values = [
+            list(value.blob_ids) for value in response.blob_sequences.values
+        ]
+        self._write_block(
+            response=response,
+            steps=list(response.blob_sequences.steps),
+            wall_times=response.blob_sequences.wall_times,
+            values=values,
+            outfile=blob_sequences_outfile,
+        )
+        for value in response.blob_sequences.values:
+            for blob_id in value.blob_ids:
+                self._fetch_and_write_blob(blob_id)
+
+    def _fetch_and_write_blob(self, blob_id, experiment_dir):
+        request = export_service_pb2.StreamBlobRequest(blob_id=blob_id)
+        stream = self._api.StreamBlob(
             request, metadata=grpc_util.version_metadata()
         )
-        for response in stream:
-            metadata = base64.b64encode(
-                response.tag_metadata.SerializeToString()
-            ).decode("ascii")
-            wall_times = [
-                t.ToNanoseconds() / 1e9 for t in response.points.wall_times
-            ]
-            yield {
-                u"run": response.run_name,
-                u"tag": response.tag_name,
-                u"summary_metadata": metadata,
-                u"points": {
-                    u"steps": list(response.points.steps),
-                    u"wall_times": wall_times,
-                    u"values": list(response.points.values),
-                },
-            }
+        filename = os.path.join(
+            experiment_dir, _FILENAME_BLOBS_DIR, "blob_%s.bin" % blob_id
+        )
+        bytes_written = 0
+        with open(filename, "wb") as outfile:
+            for response in stream:
+                if response.offset != bytes_written:
+                    raise ValueError(
+                        "integrity check failure: got offset=%d after writing %d bytes"
+                        % (response.offset, bytes_written)
+                    )
+                bytes_written += outfile.write(response.data)
 
 
 def list_experiments(api_client, fieldmask=None, read_time=None):

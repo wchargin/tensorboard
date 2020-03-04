@@ -15,6 +15,8 @@ service TensorBoardExporterService {
   // Stream scalars for all the runs and tags in an experiment.
   rpc StreamExperimentData(StreamExperimentDataRequest)
       returns (stream StreamExperimentDataResponse) {}
+  // Read a single blob, as a stream of small chunks.
+  rpc StreamBlob(StreamBlobRequest) returns (stream StreamBlobResponse);
 }
 
 // Request to stream the experiment_id of all the experiments owned by the
@@ -90,12 +92,12 @@ message StreamExperimentDataRequest {
 // Streams data from all the runs and tags in an experiment. Each stream
 // result only contains data for a single tag from a single run. For example if
 // there are five runs and each run had two tags, the RPC will return a stream
-// of at least ten `StreamExperimentDataResponse`s, each one having the
-// either scalars or tensors for one tag. The values from a single tag may be
+// of at least ten `StreamExperimentDataResponse`s, each with the scalars,
+// tensors, or blob sequences for one tag. The values from a single tag may be
 // split among multiple responses.  Users need to aggregate information from
 // entire stream to get data for the entire experiment. Empty experiments will
-// have zero stream results. Empty runs that doesn't have any tags need not
-// be supported by a hosted service.
+// have zero stream results. Empty runs that doesn't have any tags need not be
+// supported by a hosted service.
 message StreamExperimentDataResponse {
   // Name of the tag whose data is contained in this response.
   string tag_name = 1;
@@ -103,10 +105,17 @@ message StreamExperimentDataResponse {
   string run_name = 2;
   // The metadata of the tag `tag_name`.
   .tensorboard.SummaryMetadata tag_metadata = 3;
-  // Data to store for the tag `tag_name.
-  ScalarPoints points = 4;
-  // Tensor data to store.
-  TensorPoints tensors = 5;
+  // The actual data in this time series, as either scalars, tensors, or blob
+  // sequences. For a given time series (i.e., a given run-tag combination in a
+  // given experiment), the data class will always be constant.
+  oneof data {
+    // Scalar data for this time series.
+    ScalarPoints points = 4;
+    // Tensor data for this time series.
+    TensorPoints tensors = 5;
+    // Blob sequence data for this time series.
+    BlobSequencePoints blob_sequences = 6;
+  }
 
   // Data for the scalars are stored in a columnar fashion to optimize it for
   // exporting the data into textual formats like JSON.
@@ -133,4 +142,35 @@ message StreamExperimentDataResponse {
     // Value of the point at this step / timestamp.
     repeated .tensorboard.TensorProto values = 3;
   }
+
+  // Columnar, to reduce JSON overhead: `(steps[i], wall_times[i], values[i])`
+  // is one datum. Sorted by step in ascending order.
+  message BlobSequencePoints {
+    repeated int64 steps = 1;
+    repeated google.protobuf.Timestamp wall_times = 2;
+    repeated BlobSequence values = 3;
+  }
+
+  // A single blob sequence, which may have multiple blobs (e.g., an image
+  // summary with three samples).
+  message BlobSequence {
+    // Opaque blob ID. Pass to `StreamBlob`.
+    repeated string blob_ids = 1;
+  }
+}
+
+message StreamBlobRequest {
+  string blob_id = 1;
+}
+
+// A single chunk of a blob.
+message StreamBlobResponse {
+  // The bytes in this chunk.
+  bytes data = 1;
+  // The position in the blob where this chunk begins, used as an
+  // integrity check.
+  int64 offset = 2;
+  reserved 3;
+  reserved 4;
+  reserved 5;
 }
