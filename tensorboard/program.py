@@ -409,14 +409,19 @@ class TensorBoard(object):
 
     def _make_server(self):
         """Constructs the TensorBoard WSGI app and instantiates the server."""
-        ingester = data_ingester.LocalDataIngester(self.flags)
-        ingester.start()
+        import grpc
+        from tensorboard.data import grpc_provider
+
+        addr = "localhost:6106"
+        channel = grpc.insecure_channel(addr)
+        provider = grpc_provider.GrpcDataProvider(addr, channel)
+
         app = application.TensorBoardWSGIApp(
             self.flags,
             self.plugin_loaders,
-            ingester.data_provider,
+            provider,
             self.assets_zip_provider,
-            ingester.deprecated_multiplexer,
+            deprecated_multiplexer=None,
         )
         return self.server_class(app, self.flags)
 

@@ -219,6 +219,7 @@ py_library(
         "//tensorboard/backend:application",
         "//tensorboard/backend/event_processing:data_ingester",
         "//tensorboard/backend/event_processing:event_file_inspector",
+        "//tensorboard/data:grpc_provider",
         "//tensorboard/util:argparse_util",
         "@org_pocoo_werkzeug",
         "@org_pythonhosted_six",

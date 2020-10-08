@@ -311,12 +311,12 @@ class MetricsPlugin(base_plugin.TBPlugin):
             experiment_id=experiment,
             plugin_name=scalar_metadata.PLUGIN_NAME,
         )
-        histogram_mapping = self._data_provider.list_tensors(
+        histogram_mapping = {} and self._data_provider.list_tensors(
             ctx,
             experiment_id=experiment,
             plugin_name=histogram_metadata.PLUGIN_NAME,
         )
-        image_mapping = self._data_provider.list_blob_sequences(
+        image_mapping = {} and self._data_provider.list_blob_sequences(
             ctx,
             experiment_id=experiment,
             plugin_name=image_metadata.PLUGIN_NAME,
