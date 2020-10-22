@@ -107,6 +107,28 @@ load("@upb//bazel:repository_defs.bzl", "bazel_version_repository")
 
 bazel_version_repository(name = "bazel_version")
 
+http_archive(
+    name = "io_bazel_rules_rust",
+    sha256 = "f1cc200d7ea89692e6376e1ecef3375b8ac17c830b532c764babb7639dc439a9",
+    strip_prefix = "rules_rust-ef9b67ead08161728528c5caf03cc28624910e2e",
+    urls = [
+        # Pending pull request: https://github.com/bazelbuild/rules_rust/pull/460
+        "https://github.com/bazelbuild/rules_rust/archive/ef9b67ead08161728528c5caf03cc28624910e2e.tar.gz",
+    ],
+)
+
+load("@io_bazel_rules_rust//rust:repositories.bzl", "rust_repositories")
+
+rust_repositories()
+
+load("@io_bazel_rules_rust//:workspace.bzl", "rust_workspace")
+
+rust_workspace()
+
+load("//third_party/rust:crates.bzl", "raze_fetch_remote_crates")
+
+raze_fetch_remote_crates()
+
 # Please add all new dependencies in workspace.bzl.
 load("//third_party:workspace.bzl", "tensorboard_workspace")
 tensorboard_workspace()
