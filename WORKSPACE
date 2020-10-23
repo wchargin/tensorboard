@@ -109,11 +109,11 @@ bazel_version_repository(name = "bazel_version")
 
 http_archive(
     name = "io_bazel_rules_rust",
-    sha256 = "f1cc200d7ea89692e6376e1ecef3375b8ac17c830b532c764babb7639dc439a9",
-    strip_prefix = "rules_rust-ef9b67ead08161728528c5caf03cc28624910e2e",
+    sha256 = "9beda941ab076d15428d8615475329bd65002a13a26c2837932af0fb3dc582c5",
+    strip_prefix = "rules_rust-9426a3820093e75ea07d14f875e42f789632507f",
     urls = [
-        # Pending pull request: https://github.com/bazelbuild/rules_rust/pull/460
-        "https://github.com/bazelbuild/rules_rust/archive/ef9b67ead08161728528c5caf03cc28624910e2e.tar.gz",
+        # Master branch as of 2020-10-23
+        "https://github.com/bazelbuild/rules_rust/archive/9426a3820093e75ea07d14f875e42f789632507f.tar.gz",
     ],
 )
 
