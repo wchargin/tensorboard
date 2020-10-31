@@ -18,5 +18,5 @@ def raze_fetch_remote_crates():
         type = "tar.gz",
         sha256 = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de",
         strip_prefix = "byteorder-1.3.4",
-        build_file = Label("//third_party/rust/remote:byteorder-1.3.4.BUILD.bazel"),
+        build_file = Label("//third_party/rust/remote:BUILD.byteorder-1.3.4.bazel"),
     )
