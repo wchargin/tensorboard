@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.3.4"
+crc = "1.8.1"
 
 [[bin]]
 name = "rustboard"
@@ -20,3 +21,6 @@ path = "lib.rs"
 [raze]
 workspace_path = "//third_party/rust"
 genmode = "Remote"
+
+[raze.crates.crc.'1.8.1']
+gen_buildrs = true

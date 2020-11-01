@@ -20,3 +20,12 @@ alias(
         "manual",
     ],
 )
+
+alias(
+    name = "crc",
+    actual = "@raze__crc__1_8_1//:crc",
+    tags = [
+        "cargo-raze",
+        "manual",
+    ],
+)
