@@ -9,9 +9,11 @@ rust_library(
     srcs = [
         "lib.rs",
         "masked_crc.rs",
+        "tf_record.rs",
     ],
     edition = "2018",
     deps = [
+        "//third_party/rust:byteorder",
         "//third_party/rust:crc",
     ],
 )
