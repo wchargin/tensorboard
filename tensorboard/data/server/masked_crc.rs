@@ -1,6 +1,6 @@
 //! Checksums as used by TFRecords.
 
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Display};
 
 /// A CRC-32-C (Castagnoli) checksum after a masking permutation.
 ///
@@ -14,7 +14,13 @@ pub struct MaskedCrc(pub u32);
 
 impl Debug for MaskedCrc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "MaskedCrc({:#010x?})", self.0)
+        write!(f, "MaskedCrc({})", self)
+    }
+}
+
+impl Display for MaskedCrc {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#010x?}", self.0)
     }
 }
 
@@ -62,9 +68,11 @@ mod tests {
     #[test]
     fn test_debug() {
         let long_crc = MaskedCrc(0xf1234567);
+        assert_eq!(format!("{}", long_crc), "0xf1234567");
         assert_eq!(format!("{:?}", long_crc), "MaskedCrc(0xf1234567)");
 
         let short_crc = MaskedCrc(0x00000123);
+        assert_eq!(format!("{}", short_crc), "0x00000123");
         assert_eq!(format!("{:?}", short_crc), "MaskedCrc(0x00000123)");
     }
 }

@@ -15,6 +15,7 @@ rust_library(
     deps = [
         "//third_party/rust:byteorder",
         "//third_party/rust:crc",
+        "//third_party/rust:thiserror",
     ],
 )
 
