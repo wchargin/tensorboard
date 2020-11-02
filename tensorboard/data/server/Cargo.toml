@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 byteorder = "1.3.4"
 crc = "1.8.1"
+thiserror = "1.0.21"
 
 [[bin]]
 name = "rustboard"
@@ -24,3 +25,12 @@ genmode = "Remote"
 
 [raze.crates.crc.'1.8.1']
 gen_buildrs = true
+
+[raze.crates.thiserror.'1.0.21']
+gen_buildrs = true
+
+[raze.crates.proc-macro2.'1.0.24']
+additional_flags = [
+    "--cfg=use_proc_macro",
+    "--cfg=wrap_proc_macro",
+]

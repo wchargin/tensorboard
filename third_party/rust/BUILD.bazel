@@ -29,3 +29,12 @@ alias(
         "manual",
     ],
 )
+
+alias(
+    name = "thiserror",
+    actual = "@raze__thiserror__1_0_21//:thiserror",
+    tags = [
+        "cargo-raze",
+        "manual",
+    ],
+)
