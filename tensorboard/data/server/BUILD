@@ -50,3 +50,26 @@ rust_binary(
     srcs = ["main.rs"],
     edition = "2018",
 )
+
+rust_binary(
+    name = "build_protos",
+    srcs = ["build_protos.rs"],
+    edition = "2018",
+    deps = [
+        "//third_party/rust:prost_build",
+    ],
+)
+
+genrule(
+    name = "gen_protos",
+    srcs = [
+        "//tensorboard/compat/proto:event.proto",
+        "//tensorboard/compat/proto:proto_srcs",
+    ],
+    outs = ["tensorboard.pb.rs"],
+    cmd = "PROTOC=$(execpath @com_google_protobuf//:protoc) $(execpath :build_protos) $@ $(location //tensorboard/compat/proto:event.proto) $(locations //tensorboard/compat/proto:proto_srcs)",
+    tools = [
+        ":build_protos",
+        "@com_google_protobuf//:protoc",
+    ],
+)
